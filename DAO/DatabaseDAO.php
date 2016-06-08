@@ -1,6 +1,7 @@
 <?php
 
 include("includes/Constant.php");
+include("includes/TBL_Constant.php");
 if (!class_exists('Database')) {
 
     class Database extends PDO {

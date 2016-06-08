@@ -1,4 +1,4 @@
-/<?php
+<?php
 
 /* * *****************************************************************************************
  * User Signup                                                                           
@@ -13,9 +13,13 @@ function Signup() {
     $request = $app->request();
     $body = $request->getBody();
     $jsondata = json_decode($body);
-    $fname = $jsondata->fname;
-    $lname = $jsondata->lname;
-    $email = $jsondata->email;
+    $fname = $jsondata->review_text;
+    $lname = $jsondata->user_id;
+    $email = $jsondata->sku_code;
+    $result['msg_display'] = $fname;
+            echo json_encode($result);
+    //echo $fname;
+    exit;
     $password = $jsondata->password;
     $contact_no = $jsondata->contact_no;
     $mob_ver_code = $jsondata->mob_ver_code;
@@ -24,30 +28,21 @@ function Signup() {
 
     try {
         $UserDAO = new UserDAO();
-        $isEmail = $UserDAO->isEmailExists($email);
-        $isMobile = $UserDAO->isMobileExists($contact_no);
+        $isMobileExists = $UserDAO->isMobileExists($contact_no);
 
-        if (!empty($isEmail)) {
-            $result['error_status'] = '1';
-            $result['status_message'] = "Email already exists.";
-            $result['display_message'] = "1";
-            $result['error_code'] = "001";
-            echo json_encode($result);
-        } elseif (!empty($isMobile)) {
-            $result['error_status'] = '1';
-            $result['status_message'] = "Mobile no already exists.";
-            $result['display_message'] = "1";
-            $result['error_code'] = "002";
+        if (!empty($isMobileExists)) {
+            $result['success'] = '0';
+            $result['msg_id'] = "1";
+            $result['msg_display'] = "1";
             echo json_encode($result);
         } else {
             $inserted_Id = $UserDAO->SignupUser($fname, $lname, $email, $password, $contact_no, $mob_ver_code, $device_id, $gcm_id);
             $dataArray = $UserDAO->getUserById($inserted_Id);
 
+            $result['success'] = '1';
+            $result['msg_id'] = "2";
+            $result['msg_display'] = "1";
             $result['response'] = $dataArray;
-            $result['error_status'] = '0';
-            $result['status_message'] = "Register Successfully";
-            $result['display_message'] = "1";
-            $result['error_code'] = "000";
             echo json_encode($result);
         }
     } catch (PDOException $e) {
