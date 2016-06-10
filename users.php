@@ -1,52 +1,80 @@
 <?php
 
 /* * *****************************************************************************************
- * User Signup                                                                           
- * url - /Signup 																		  
+ * Get OTP for Mobile Verification                                                                         
+ * url - /getotp																		  
  * method - POST																		   
- * params - fname, lname, email, password, contact_no, mob_ver_code, device_id, gcm_id  
+ * params - mobile_number  
  * ***************************************************************************************** */
 
-function Signup() {
+function getOTP() {
+    $app = \Slim\Slim::getInstance();
+    $request = $app->request();
+    $body = $request->getBody();
+    $jsondata = json_decode($body);
+    $mobile_number = $jsondata->mobile_number;
+    try {
+        $UserDAO = new UserDAO();
+	$isMobileExists = $UserDAO->isMobileExists($mobile_number);// Check if mobile number already register or not
+	
+	if (!empty($isMobileExists)) {
+	    $result['success'] = '0';
+	    $result['message_id'] = "3";
+	    $result['message_display'] = "1";
+	    echo json_encode($result);
+	} else {
+	    $dataArray = $UserDAO->getOTP($mobile_number);
+	    
+	    $result['success'] = '1';
+	    $result['response'] = $dataArray;
+	    echo json_encode($result);
+	}
+    } catch (PDOException $e) {
+        echo '{"error":{"text":' . $e->getMessage() . '}}';
+    }
+}
+
+/* * *****************************************************************************************
+ * User Signup                                                                           
+ * url - /signup 																		  
+ * method - POST																		   
+ * params - fname, lname, email, password, mobile_number, mobile_verification_code, device_id, gcm_id  
+ * ***************************************************************************************** */
+
+function signup() {
 
     $app = \Slim\Slim::getInstance();
     $request = $app->request();
     $body = $request->getBody();
     $jsondata = json_decode($body);
-    $fname = $jsondata->review_text;
-    $lname = $jsondata->user_id;
-    $email = $jsondata->sku_code;
-    $result['msg_display'] = $fname;
-            echo json_encode($result);
-    //echo $fname;
-    exit;
+    $fname = $jsondata->fname;
+    $lname = $jsondata->lname;
+    $email = $jsondata->email;
     $password = $jsondata->password;
-    $contact_no = $jsondata->contact_no;
-    $mob_ver_code = $jsondata->mob_ver_code;
+    $contact_no = $jsondata->mobile_number;
+    $mob_ver_code = $jsondata->mobile_verification_code;
     $device_id = $jsondata->device_id;
     $gcm_id = $jsondata->gcm_id;
 
     try {
-        $UserDAO = new UserDAO();
-        $isMobileExists = $UserDAO->isMobileExists($contact_no);
-
-        if (!empty($isMobileExists)) {
-            $result['success'] = '0';
-            $result['msg_id'] = "1";
-            $result['msg_display'] = "1";
-            echo json_encode($result);
-        } else {
-            $inserted_Id = $UserDAO->SignupUser($fname, $lname, $email, $password, $contact_no, $mob_ver_code, $device_id, $gcm_id);
-            $dataArray = $UserDAO->getUserById($inserted_Id);
-
-            $result['success'] = '1';
-            $result['msg_id'] = "2";
-            $result['msg_display'] = "1";
-            $result['response'] = $dataArray;
-            echo json_encode($result);
-        }
+	$UserDAO = new UserDAO();
+	$user_id = $UserDAO->SignupUser($fname, $lname, $email, $password, $contact_no, $mob_ver_code, $device_id, $gcm_id);
+	
+	if (!empty($inserted_Id)) {
+	    $dataArray = $UserDAO->getUserById($user_id);
+	    $result['success'] = '1';
+	    $result['message_id'] = "2";
+	    $result['message_display'] = "1";
+	    $result['response'] = $dataArray;
+	    echo json_encode($result);
+	} else {
+	    $result['success'] = '0';
+	    $result['message_id'] = "1";
+	    $result['message_display'] = "1";
+	    echo json_encode($result);
+	}
     } catch (PDOException $e) {
-        echo '{"error":{"text":' . $e->getMessage() . '}}';
+	echo '{"error":{"text":' . $e->getMessage() . '}}';
     }
 }
 
@@ -70,25 +98,25 @@ function updateUserInfo() {
     $state = $jsondata->state;
 
     try {
-        $UserDAO = new UserDAO();
-        $dataArray = $UserDAO->updateUserInfo($user_id, $address1, $address2, $city, $state);
+	$UserDAO = new UserDAO();
+	$dataArray = $UserDAO->updateUserInfo($user_id, $address1, $address2, $city, $state);
 
-        if (!$dataArray) {
-            $result['error_status'] = '1';
-            $result['status_message'] = "Information not updated";
-            $result['display_message'] = "1";
-            $result['error_code'] = "005";
-            echo json_encode($result);
-        } else {
-            $result['response'] = true;
-            $result['error_status'] = '0';
-            $result['status_message'] = "Information updated successfully";
-            $result['display_message'] = "0";
-            $result['error_code'] = "000";
-            echo json_encode($result);
-        }
+	if (!$dataArray) {
+	    $result['error_status'] = '1';
+	    $result['status_message'] = "Information not updated";
+	    $result['display_message'] = "1";
+	    $result['error_code'] = "005";
+	    echo json_encode($result);
+	} else {
+	    $result['response'] = true;
+	    $result['error_status'] = '0';
+	    $result['status_message'] = "Information updated successfully";
+	    $result['display_message'] = "0";
+	    $result['error_code'] = "000";
+	    echo json_encode($result);
+	}
     } catch (PDOException $e) {
-        echo '{"error":{"text":' . $e->getMessage() . '}}';
+	echo '{"error":{"text":' . $e->getMessage() . '}}';
     }
 }
 
@@ -100,31 +128,31 @@ function updateUserInfo() {
  * ***************************************************************************************** */
 
 function getUsersLogin() {
-	$app = \Slim\Slim::getInstance();
+    $app = \Slim\Slim::getInstance();
     $request = $app->request();
     $body = $request->getBody();
     $jsondata = json_decode($body);
     $userinfo = $jsondata->userinfo;
     $password = $jsondata->password;
     try {
-        $UserDAO = new UserDAO();
-        $dataArray = $UserDAO->getUsersLogin($userinfo, $password);
-        $result['response'] = $dataArray;
-        if (empty($dataArray)) {
-            $result['error_status'] = '1';
-            $result['status_message'] = "Invalid Login Details";
-            $result['display_message'] = "1";
-            $result['error_code'] = "003";
-            echo json_encode($result);
-        } else {
-            $result['error_status'] = '0';
-            $result['status_message'] = "Login successful";
-            $result['display_message'] = "1";
-            $result['error_code'] = "000";
-            echo json_encode($result);
-        }
+	$UserDAO = new UserDAO();
+	$dataArray = $UserDAO->getUsersLogin($userinfo, $password);
+	$result['response'] = $dataArray;
+	if (empty($dataArray)) {
+	    $result['error_status'] = '1';
+	    $result['status_message'] = "Invalid Login Details";
+	    $result['display_message'] = "1";
+	    $result['error_code'] = "003";
+	    echo json_encode($result);
+	} else {
+	    $result['error_status'] = '0';
+	    $result['status_message'] = "Login successful";
+	    $result['display_message'] = "1";
+	    $result['error_code'] = "000";
+	    echo json_encode($result);
+	}
     } catch (PDOException $e) {
-        echo '{"error":{"text":' . $e->getMessage() . '}}';
+	echo '{"error":{"text":' . $e->getMessage() . '}}';
     }
 }
 
@@ -137,26 +165,26 @@ function getUsersLogin() {
 
 function verifyMobCode($user_id, $code) {
     try {
-        $UserDAO = new UserDAO();
-        $dataArray = $UserDAO->verifyMobCode($user_id, $code);
+	$UserDAO = new UserDAO();
+	$dataArray = $UserDAO->verifyMobCode($user_id, $code);
 
-        if (empty($dataArray)) {
-            $result['error_status'] = '1';
-            $result['status_message'] = "Code not match!";
-            $result['display_message'] = "1";
-            $result['error_code'] = "003";
-            echo json_encode($result);
-        } else {
-            $UserDAO->updateMobVerificationStatus($user_id);
-            $result['response'] = true;
-            $result['error_status'] = '0';
-            $result['status_message'] = "Mobile verify successfully.";
-            $result['display_message'] = "0";
-            $result['error_code'] = "000";
-            echo json_encode($result);
-        }
+	if (empty($dataArray)) {
+	    $result['error_status'] = '1';
+	    $result['status_message'] = "Code not match!";
+	    $result['display_message'] = "1";
+	    $result['error_code'] = "003";
+	    echo json_encode($result);
+	} else {
+	    $UserDAO->updateMobVerificationStatus($user_id);
+	    $result['response'] = true;
+	    $result['error_status'] = '0';
+	    $result['status_message'] = "Mobile verify successfully.";
+	    $result['display_message'] = "0";
+	    $result['error_code'] = "000";
+	    echo json_encode($result);
+	}
     } catch (PDOException $e) {
-        echo '{"error":{"text":' . $e->getMessage() . '}}';
+	echo '{"error":{"text":' . $e->getMessage() . '}}';
     }
 }
 
@@ -169,24 +197,24 @@ function verifyMobCode($user_id, $code) {
 
 function getUserDetails($user_id) {
     try {
-        $UserDAO = new UserDAO();
-        $dataArray = $UserDAO->getUserDetails($user_id);
-        $result['response'] = $dataArray;
-        if (empty($dataArray)) {
-            $result['error_status'] = '1';
-            $result['status_message'] = "Error";
-            $result['display_message'] = "1";
-            $result['error_code'] = "004";
-            echo json_encode($result);
-        } else {
-            $result['error_status'] = '0';
-            $result['status_message'] = "Success";
-            $result['display_message'] = "0";
-            $result['error_code'] = "000";
-            echo json_encode($result);
-        }
+	$UserDAO = new UserDAO();
+	$dataArray = $UserDAO->getUserDetails($user_id);
+	$result['response'] = $dataArray;
+	if (empty($dataArray)) {
+	    $result['error_status'] = '1';
+	    $result['status_message'] = "Error";
+	    $result['display_message'] = "1";
+	    $result['error_code'] = "004";
+	    echo json_encode($result);
+	} else {
+	    $result['error_status'] = '0';
+	    $result['status_message'] = "Success";
+	    $result['display_message'] = "0";
+	    $result['error_code'] = "000";
+	    echo json_encode($result);
+	}
     } catch (PDOException $e) {
-        echo '{"error":{"text":' . $e->getMessage() . '}}';
+	echo '{"error":{"text":' . $e->getMessage() . '}}';
     }
 }
 
@@ -209,25 +237,25 @@ function updateUserDetails() {
     $mobile_number = $jsondata->mobile_number;
 
     try {
-        $UserDAO = new UserDAO();
-        $dataArray = $UserDAO->updateUserDetails($user_id, $first_name, $last_name, $email_id, $mobile_number);
-        if (!$dataArray) {
-            $result['response'] = false;
-            $result['error_status'] = '1';
-            $result['status_message'] = "Error";
-            $result['display_message'] = "1";
-            $result['error_code'] = "004";
-            echo json_encode($result);
-        } else {
-            $result['response'] = true;
-            $result['error_status'] = '0';
-            $result['status_message'] = "Details updated successfully.";
-            $result['display_message'] = "1";
-            $result['error_code'] = "000";
-            echo json_encode($result);
-        }
+	$UserDAO = new UserDAO();
+	$dataArray = $UserDAO->updateUserDetails($user_id, $first_name, $last_name, $email_id, $mobile_number);
+	if (!$dataArray) {
+	    $result['response'] = false;
+	    $result['error_status'] = '1';
+	    $result['status_message'] = "Error";
+	    $result['display_message'] = "1";
+	    $result['error_code'] = "004";
+	    echo json_encode($result);
+	} else {
+	    $result['response'] = true;
+	    $result['error_status'] = '0';
+	    $result['status_message'] = "Details updated successfully.";
+	    $result['display_message'] = "1";
+	    $result['error_code'] = "000";
+	    echo json_encode($result);
+	}
     } catch (PDOException $e) {
-        echo '{"error":{"text":' . $e->getMessage() . '}}';
+	echo '{"error":{"text":' . $e->getMessage() . '}}';
     }
 }
 
@@ -240,27 +268,26 @@ function updateUserDetails() {
 
 function userAddressesList($user_id) {
     try {
-        $UserDAO = new UserDAO();
-        $dataArray = $UserDAO->userAddressesList($user_id);
-        $result['response'] = $dataArray;
-        if (empty($dataArray)) {
-            $result['error_status'] = '1';
-            $result['status_message'] = "No Data";
-            $result['display_message'] = "0";
-            $result['error_code'] = "004";
-            echo json_encode($result);
-        } else {
-            $result['error_status'] = '0';
-            $result['status_message'] = "Success";
-            $result['display_message'] = "0";
-            $result['error_code'] = "000";
-            echo json_encode($result);
-        }
+	$UserDAO = new UserDAO();
+	$dataArray = $UserDAO->userAddressesList($user_id);
+	$result['response'] = $dataArray;
+	if (empty($dataArray)) {
+	    $result['error_status'] = '1';
+	    $result['status_message'] = "No Data";
+	    $result['display_message'] = "0";
+	    $result['error_code'] = "004";
+	    echo json_encode($result);
+	} else {
+	    $result['error_status'] = '0';
+	    $result['status_message'] = "Success";
+	    $result['display_message'] = "0";
+	    $result['error_code'] = "000";
+	    echo json_encode($result);
+	}
     } catch (PDOException $e) {
-        echo '{"error":{"text":' . $e->getMessage() . '}}';
+	echo '{"error":{"text":' . $e->getMessage() . '}}';
     }
 }
-
 
 /* * *****************************************************************************************
  * Add new address                                                                       
@@ -279,27 +306,27 @@ function addNewUserAddress() {
     $city = $jsondata->city;
     $pincode = $jsondata->pincode;
     $user_id = $jsondata->user_id;
-    
+
     try {
-        $UserDAO = new UserDAO();
-        $dataArray = $UserDAO->addNewUserAdress($address1, $address2, $city, $pincode, $user_id);
-        if (!$dataArray) {
-            $result['response'] = false;
-            $result['error_status'] = '1';
-            $result['status_message'] = "Error";
-            $result['display_message'] = "1";
-            $result['error_code'] = "004";
-            echo json_encode($result);
-        } else {
-            $result['response'] = true;
-            $result['error_status'] = '0';
-            $result['status_message'] = "Success";
-            $result['display_message'] = "1";
-            $result['error_code'] = "000";
-            echo json_encode($result);
-        }
+	$UserDAO = new UserDAO();
+	$dataArray = $UserDAO->addNewUserAdress($address1, $address2, $city, $pincode, $user_id);
+	if (!$dataArray) {
+	    $result['response'] = false;
+	    $result['error_status'] = '1';
+	    $result['status_message'] = "Error";
+	    $result['display_message'] = "1";
+	    $result['error_code'] = "004";
+	    echo json_encode($result);
+	} else {
+	    $result['response'] = true;
+	    $result['error_status'] = '0';
+	    $result['status_message'] = "Success";
+	    $result['display_message'] = "1";
+	    $result['error_code'] = "000";
+	    echo json_encode($result);
+	}
     } catch (PDOException $e) {
-        echo '{"error":{"text":' . $e->getMessage() . '}}';
+	echo '{"error":{"text":' . $e->getMessage() . '}}';
     }
 }
 
@@ -312,25 +339,25 @@ function addNewUserAddress() {
 
 function removeUserAddress($user_address_id) {
     try {
-        $UserDAO = new UserDAO();
-        $dataArray = $UserDAO->removeUserAddress($user_address_id);
-        if (!$dataArray) {
-            $result['response'] = false;
-            $result['error_status'] = '1';
-            $result['status_message'] = "Error";
-            $result['display_message'] = "1";
-            $result['error_code'] = "004";
-            echo json_encode($result);
-        } else {
-            $result['response'] = true;
-            $result['error_status'] = '0';
-            $result['status_message'] = "Success";
-            $result['display_message'] = "1";
-            $result['error_code'] = "000";
-            echo json_encode($result);
-        }
+	$UserDAO = new UserDAO();
+	$dataArray = $UserDAO->removeUserAddress($user_address_id);
+	if (!$dataArray) {
+	    $result['response'] = false;
+	    $result['error_status'] = '1';
+	    $result['status_message'] = "Error";
+	    $result['display_message'] = "1";
+	    $result['error_code'] = "004";
+	    echo json_encode($result);
+	} else {
+	    $result['response'] = true;
+	    $result['error_status'] = '0';
+	    $result['status_message'] = "Success";
+	    $result['display_message'] = "1";
+	    $result['error_code'] = "000";
+	    echo json_encode($result);
+	}
     } catch (PDOException $e) {
-        echo '{"error":{"text":' . $e->getMessage() . '}}';
+	echo '{"error":{"text":' . $e->getMessage() . '}}';
     }
 }
 
@@ -351,27 +378,27 @@ function editUserAddress() {
     $city = $jsondata->city;
     $pincode = $jsondata->pincode;
     $user_address_id = $jsondata->user_address_id;
-    
+
     try {
-        $UserDAO = new UserDAO();
-        $dataArray = $UserDAO->editUserAddress($address1, $address2, $city, $pincode, $user_address_id);
-        if (!$dataArray) {
-            $result['response'] = false;
-            $result['error_status'] = '1';
-            $result['status_message'] = "Error";
-            $result['display_message'] = "1";
-            $result['error_code'] = "004";
-            echo json_encode($result);
-        } else {
-            $result['response'] = true;
-            $result['error_status'] = '0';
-            $result['status_message'] = "Success";
-            $result['display_message'] = "1";
-            $result['error_code'] = "000";
-            echo json_encode($result);
-        }
+	$UserDAO = new UserDAO();
+	$dataArray = $UserDAO->editUserAddress($address1, $address2, $city, $pincode, $user_address_id);
+	if (!$dataArray) {
+	    $result['response'] = false;
+	    $result['error_status'] = '1';
+	    $result['status_message'] = "Error";
+	    $result['display_message'] = "1";
+	    $result['error_code'] = "004";
+	    echo json_encode($result);
+	} else {
+	    $result['response'] = true;
+	    $result['error_status'] = '0';
+	    $result['status_message'] = "Success";
+	    $result['display_message'] = "1";
+	    $result['error_code'] = "000";
+	    echo json_encode($result);
+	}
     } catch (PDOException $e) {
-        echo '{"error":{"text":' . $e->getMessage() . '}}';
+	echo '{"error":{"text":' . $e->getMessage() . '}}';
     }
 }
 
@@ -384,71 +411,66 @@ function editUserAddress() {
 
 function makeDefaultUserAddress($user_address_id, $user_id) {
     try {
-        $UserDAO = new UserDAO();
-        $dataArray = $UserDAO->makeDefaultUserAddress($user_address_id, $user_id);
-        if (!$dataArray) {
-            $result['response'] = false;
-            $result['error_status'] = '1';
-            $result['status_message'] = "Error";
-            $result['display_message'] = "1";
-            $result['error_code'] = "004";
-            echo json_encode($result);
-        } else {
-            $result['response'] = true;
-            $result['error_status'] = '0';
-            $result['status_message'] = "Success";
-            $result['display_message'] = "1";
-            $result['error_code'] = "000";
-            echo json_encode($result);
-        }
+	$UserDAO = new UserDAO();
+	$dataArray = $UserDAO->makeDefaultUserAddress($user_address_id, $user_id);
+	if (!$dataArray) {
+	    $result['response'] = false;
+	    $result['error_status'] = '1';
+	    $result['status_message'] = "Error";
+	    $result['display_message'] = "1";
+	    $result['error_code'] = "004";
+	    echo json_encode($result);
+	} else {
+	    $result['response'] = true;
+	    $result['error_status'] = '0';
+	    $result['status_message'] = "Success";
+	    $result['display_message'] = "1";
+	    $result['error_code'] = "000";
+	    echo json_encode($result);
+	}
     } catch (PDOException $e) {
-        echo '{"error":{"text":' . $e->getMessage() . '}}';
+	echo '{"error":{"text":' . $e->getMessage() . '}}';
     }
 }
 
-/*******************************************************************************************
+/* * *****************************************************************************************
  * Edit User Profile Image                                                                **
  * url - /editProfilePic																  **
  * method - POST																		  **
  * params - user_id,imageurl                                                              **
- *******************************************************************************************/
+ * ***************************************************************************************** */
 
+function editProfilePic() {
 
-function editProfilePic()
-{
-
-    $app      = \Slim\Slim::getInstance();
-    $request  = $app->request();
-    $body     = $request->getBody();
+    $app = \Slim\Slim::getInstance();
+    $request = $app->request();
+    $body = $request->getBody();
     $jsondate = json_decode($body);
-    $user_id  = $jsondate->user_id;
+    $user_id = $jsondate->user_id;
     $imageurl = $jsondate->image_url;
 
     try {
-        $UserDAO            = new UserDAO();
-        $status            = $UserDAO->editProfilePic($imageurl, $user_id);
-        if (!$status) {
-            $result['response'] = false;
-            $result['error_status']    = '1';
-            $result['status_message']  = "Unable To Update this time";
-            $result['display_message'] = "1";
-            $result['error_code']      = "004";
-            echo json_encode($result);
-        } else {
-            $result['response'] = true;
-            $result['error_status']    = '0';
-            $result['status_message']  = "Profile Image Sucessfully Updated";
-            $result['display_message'] = "1";
-            $result['error_code']      = "000";
-            echo json_encode($result);
-        }
-    }
-
-    catch (PDOException $e) {
-        echo '{"error":{"text":' . $e->getMessage() . '}}';
+	$UserDAO = new UserDAO();
+	$status = $UserDAO->editProfilePic($imageurl, $user_id);
+	if (!$status) {
+	    $result['response'] = false;
+	    $result['error_status'] = '1';
+	    $result['status_message'] = "Unable To Update this time";
+	    $result['display_message'] = "1";
+	    $result['error_code'] = "004";
+	    echo json_encode($result);
+	} else {
+	    $result['response'] = true;
+	    $result['error_status'] = '0';
+	    $result['status_message'] = "Profile Image Sucessfully Updated";
+	    $result['display_message'] = "1";
+	    $result['error_code'] = "000";
+	    echo json_encode($result);
+	}
+    } catch (PDOException $e) {
+	echo '{"error":{"text":' . $e->getMessage() . '}}';
     }
 }
-
 
 /* * *****************************************************************************************
  * Facebook Login                                                                           
@@ -472,34 +494,33 @@ function facebookLogin() {
     $gcm_id = $jsondata->gcm_id;
 
     try {
-        $UserDAO = new UserDAO();
-        $isEmail = $UserDAO->isEmailExists($email);
-        if (!empty($isEmail)) {
-			$updateStatus = $UserDAO->UpdateUserInfoViaFB($isEmail[0]['user_id'], $facebookID, $email, $name, $image_url, $access_token, $device_id, $gcm_id);
-			$dataArray = $UserDAO->getUserById($isEmail[0]['user_id']);
-			
-			$result['response'] = $dataArray;
-            $result['error_status'] = '0';
-            $result['status_message'] = "User info updated successfully.";
-            $result['display_message'] = "0";
-            $result['error_code'] = "000";
-            echo json_encode($result);
-        } else {
-            $inserted_Id = $UserDAO->SignupUserViaFB($facebookID, $email, $name, $image_url, $access_token, $device_id, $gcm_id);
-            $dataArray = $UserDAO->getUserById($inserted_Id);
+	$UserDAO = new UserDAO();
+	$isEmail = $UserDAO->isEmailExists($email);
+	if (!empty($isEmail)) {
+	    $updateStatus = $UserDAO->UpdateUserInfoViaFB($isEmail[0]['user_id'], $facebookID, $email, $name, $image_url, $access_token, $device_id, $gcm_id);
+	    $dataArray = $UserDAO->getUserById($isEmail[0]['user_id']);
 
-            $result['response'] = $dataArray;
-            $result['error_status'] = '0';
-            $result['status_message'] = "Register Successfully";
-            $result['display_message'] = "0";
-            $result['error_code'] = "000";
-            echo json_encode($result);
-        }
+	    $result['response'] = $dataArray;
+	    $result['error_status'] = '0';
+	    $result['status_message'] = "User info updated successfully.";
+	    $result['display_message'] = "0";
+	    $result['error_code'] = "000";
+	    echo json_encode($result);
+	} else {
+	    $inserted_Id = $UserDAO->SignupUserViaFB($facebookID, $email, $name, $image_url, $access_token, $device_id, $gcm_id);
+	    $dataArray = $UserDAO->getUserById($inserted_Id);
+
+	    $result['response'] = $dataArray;
+	    $result['error_status'] = '0';
+	    $result['status_message'] = "Register Successfully";
+	    $result['display_message'] = "0";
+	    $result['error_code'] = "000";
+	    echo json_encode($result);
+	}
     } catch (PDOException $e) {
-        echo '{"error":{"text":' . $e->getMessage() . '}}';
+	echo '{"error":{"text":' . $e->getMessage() . '}}';
     }
 }
-
 
 /* * *****************************************************************************************
  * Google Plus Login                                                                           
@@ -523,31 +544,31 @@ function googlePlusLogin() {
     $gcm_id = $jsondata->gcm_id;
 
     try {
-        $UserDAO = new UserDAO();
-        $isEmail = $UserDAO->isEmailExists($email);
-        if (!empty($isEmail)) {
-			$updateStatus = $UserDAO->UpdateUserInfoViaGoogle($isEmail[0]['user_id'], $google_ID, $email, $name, $image_url, $access_token, $device_id, $gcm_id);
-			$dataArray = $UserDAO->getUserById($isEmail[0]['user_id']);
-			
-			$result['response'] = $dataArray;
-            $result['error_status'] = '0';
-            $result['status_message'] = "User info updated successfully.";
-            $result['display_message'] = "0";
-            $result['error_code'] = "000";
-            echo json_encode($result);
-        } else {
-            $inserted_Id = $UserDAO->SignupUserViaGoogle($google_ID, $email, $name, $image_url, $access_token, $device_id, $gcm_id);
-            $dataArray = $UserDAO->getUserById($inserted_Id);
+	$UserDAO = new UserDAO();
+	$isEmail = $UserDAO->isEmailExists($email);
+	if (!empty($isEmail)) {
+	    $updateStatus = $UserDAO->UpdateUserInfoViaGoogle($isEmail[0]['user_id'], $google_ID, $email, $name, $image_url, $access_token, $device_id, $gcm_id);
+	    $dataArray = $UserDAO->getUserById($isEmail[0]['user_id']);
 
-            $result['response'] = $dataArray;
-            $result['error_status'] = '0';
-            $result['status_message'] = "Register Successfully";
-            $result['display_message'] = "0";
-            $result['error_code'] = "000";
-            echo json_encode($result);
-        }
+	    $result['response'] = $dataArray;
+	    $result['error_status'] = '0';
+	    $result['status_message'] = "User info updated successfully.";
+	    $result['display_message'] = "0";
+	    $result['error_code'] = "000";
+	    echo json_encode($result);
+	} else {
+	    $inserted_Id = $UserDAO->SignupUserViaGoogle($google_ID, $email, $name, $image_url, $access_token, $device_id, $gcm_id);
+	    $dataArray = $UserDAO->getUserById($inserted_Id);
+
+	    $result['response'] = $dataArray;
+	    $result['error_status'] = '0';
+	    $result['status_message'] = "Register Successfully";
+	    $result['display_message'] = "0";
+	    $result['error_code'] = "000";
+	    echo json_encode($result);
+	}
     } catch (PDOException $e) {
-        echo '{"error":{"text":' . $e->getMessage() . '}}';
+	echo '{"error":{"text":' . $e->getMessage() . '}}';
     }
 }
 
