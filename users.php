@@ -14,23 +14,22 @@ function getOTP() {
     $jsondata = json_decode($body);
     $mobile_number = $jsondata->mobile_number;
     try {
-        $UserDAO = new UserDAO();
-	$isMobileExists = $UserDAO->isMobileExists($mobile_number);// Check if mobile number already register or not
-	
+	$UserDAO = new UserDAO();
+	$isMobileExists = $UserDAO->isMobileExists($mobile_number); // Check if mobile number already register or not
+
 	if (!empty($isMobileExists)) {
 	    $result['success'] = '0';
 	    $result['message_id'] = "3";
 	    $result['message_display'] = "1";
 	    echo json_encode($result);
 	} else {
-	    $dataArray = $UserDAO->getOTP($mobile_number);
-	    
+	    $dataArray = $UserDAO->getOTP();
 	    $result['success'] = '1';
 	    $result['response'] = $dataArray;
 	    echo json_encode($result);
 	}
     } catch (PDOException $e) {
-        echo '{"error":{"text":' . $e->getMessage() . '}}';
+	echo '{"error":{"text":' . $e->getMessage() . '}}';
     }
 }
 
@@ -59,8 +58,8 @@ function signup() {
     try {
 	$UserDAO = new UserDAO();
 	$user_id = $UserDAO->SignupUser($fname, $lname, $email, $password, $contact_no, $mob_ver_code, $device_id, $gcm_id);
-	
-	if (!empty($inserted_Id)) {
+
+	if (!empty($user_id)) {
 	    $dataArray = $UserDAO->getUserById($user_id);
 	    $result['success'] = '1';
 	    $result['message_id'] = "2";
@@ -79,41 +78,107 @@ function signup() {
 }
 
 /* * *****************************************************************************************
- * User Information Updation                                                                 
- * url - /Signup 																		  
+ * Get Users Login                                                                       
+ * url - /login 																  
  * method - POST																		 
- * params - fname, lname, email, password, contact_no, verification code, device_id, gcm_id   
+ * params - mobile_number, password                                                     
  * ***************************************************************************************** */
 
-function updateUserInfo() {
+function login() {
+    $app = \Slim\Slim::getInstance();
+    $request = $app->request();
+    $body = $request->getBody();
+    $jsondata = json_decode($body);
+    $mobile_number = $jsondata->mobile_number;
+    $password = $jsondata->password;
+    try {
+	$UserDAO = new UserDAO();
+	$isMobileExists = $UserDAO->isMobileExists($mobile_number); // Check if mobile number register or not
 
+	if (empty($isMobileExists)) {
+	    $result['success'] = '0';
+	    $result['message_id'] = "4";
+	    $result['message_display'] = "1";
+	    echo json_encode($result);
+	} else {
+	    $dataArray = $UserDAO->getUserLogin($mobile_number, $password);
+	    if (empty($dataArray)) {
+		$result['success'] = '0';
+		$result['message_id'] = "5";
+		$result['message_display'] = "1";
+		echo json_encode($result);
+	    } else {
+		$result['success'] = '1';
+		$result['message_id'] = "6";
+		$result['message_display'] = "1";
+		$result['response'] = $dataArray;
+		echo json_encode($result);
+	    }
+	}
+    } catch (PDOException $e) {
+	echo '{"error":{"text":' . $e->getMessage() . '}}';
+    }
+}
+
+/* * *****************************************************************************************
+ * Save User's search Request                                                                       
+ * url - /searchRequest 																  
+ * method - POST																		 
+ * params - user_id, source_lat, source_lng, destination_lat, destination_lng
+ * ***************************************************************************************** */
+
+function searchRequest() {
     $app = \Slim\Slim::getInstance();
     $request = $app->request();
     $body = $request->getBody();
     $jsondata = json_decode($body);
     $user_id = $jsondata->user_id;
-    $address1 = $jsondata->address1;
-    $address2 = $jsondata->address2;
-    $city = $jsondata->city;
-    $state = $jsondata->state;
+    $source_lat = $jsondata->source_lat;
+    $source_lng = $jsondata->source_lng;
+    $destination_lat = $jsondata->destination_lat;
+    $destination_lng = $jsondata->destination_lng;
 
     try {
 	$UserDAO = new UserDAO();
-	$dataArray = $UserDAO->updateUserInfo($user_id, $address1, $address2, $city, $state);
 
-	if (!$dataArray) {
-	    $result['error_status'] = '1';
-	    $result['status_message'] = "Information not updated";
-	    $result['display_message'] = "1";
-	    $result['error_code'] = "005";
+	// Inactive all previous requests of this user
+	//$inactivePreviousRequest = $UserDAO->inactivePreviousRequest($user_id);
+	//Calculate the distance of the given coordinates
+	$distance = getDrivingDistance($source_lat, $source_lng, $destination_lat, $destination_lng);
+
+	// save this request in the database for the other app users
+	$saveSearchRequest = $UserDAO->saveSearchRequest($user_id, $source_lat, $source_lng, $destination_lat, $destination_lng, $distance);
+	$openRequestArray = array();
+
+	// check the request has been saved in the database or not
+	if ($saveSearchRequest == true) {
+	    $source_lat_start = round($source_lat, 4);
+	    $source_lat_end = $source_lat + 0.0005;
+	    $source_lng_start = round($source_lng, 4);
+	    $source_lng_end = $source_lng + 0.0005;
+	    $openRequests = $UserDAO->getOpenRequest($user_id, $source_lat_start, $source_lat_end, $source_lng_start, $source_lng_end);
+	    print_r($openRequests);
+	    die;
+	    foreach ($openRequests as $openRequest) {
+		$destination_lat_start = round($openRequest['destination_lat'], 4);
+		$destination_lat_end = $destination_lat_start + 0.0003;
+		$destination_lng_start = round($openRequest['destination_lng'], 4);
+		$destination_lng_end = $destination_lng_start + 0.0003;
+
+		//Condtions for find Exact Match travellers
+		//if ($destination_lat_start <= $destination_lat AND $destination_lat <= $destination_lat_end AND $destination_lng_start <= $destination_lng AND $destination_lng <= $destination_lng_end) {
+		$openRequestArray[] = $openRequest;
+		//} 
+		//$openRequestArray[] = $request;
+	    }
+	    $result['success'] = '1';
+	    $result['response'] = $openRequestArray;
 	    echo json_encode($result);
 	} else {
-	    $result['response'] = true;
-	    $result['error_status'] = '0';
-	    $result['status_message'] = "Information updated successfully";
-	    $result['display_message'] = "0";
-	    $result['error_code'] = "000";
-	    echo json_encode($result);
+	    $result['success'] = '0';
+	    $result['message_id'] = "1";
+	    $result['message_display'] = "1";
+	    echo json_encode($result, true);
 	}
     } catch (PDOException $e) {
 	echo '{"error":{"text":' . $e->getMessage() . '}}';
@@ -121,111 +186,111 @@ function updateUserInfo() {
 }
 
 /* * *****************************************************************************************
- * Get Users Login                                                                       
- * url - /getUsersLogin 																  
+ * Save User's search Request                                                                       
+ * url - /searchRequest 																  
  * method - POST																		 
- * params - email or mobile, password                                                     
+ * params - user_id, source_lat, source_lng, destination_lat, destination_lng
  * ***************************************************************************************** */
 
-function getUsersLogin() {
+function searchRequestRefresh() {
     $app = \Slim\Slim::getInstance();
     $request = $app->request();
     $body = $request->getBody();
     $jsondata = json_decode($body);
-    $userinfo = $jsondata->userinfo;
-    $password = $jsondata->password;
+    $user_id = $jsondata->user_id;
+    $source_lat = $jsondata->source_lat;
+    $source_lng = $jsondata->source_lng;
+    $destination_lat = $jsondata->destination_lat;
+    $destination_lng = $jsondata->destination_lng;
+    $refresh = $jsondata->refresh;
+
     try {
 	$UserDAO = new UserDAO();
-	$dataArray = $UserDAO->getUsersLogin($userinfo, $password);
-	$result['response'] = $dataArray;
-	if (empty($dataArray)) {
-	    $result['error_status'] = '1';
-	    $result['status_message'] = "Invalid Login Details";
-	    $result['display_message'] = "1";
-	    $result['error_code'] = "003";
-	    echo json_encode($result);
-	} else {
-	    $result['error_status'] = '0';
-	    $result['status_message'] = "Login successful";
-	    $result['display_message'] = "1";
-	    $result['error_code'] = "000";
-	    echo json_encode($result);
+
+
+	//Calculate the distance of the given coordinates
+	$distance = getDrivingDistance($source_lat, $source_lng, $destination_lat, $destination_lng);
+
+	$openRequestArray = array();
+
+	$source_lat_start = round($source_lat, 4);
+	$source_lat_end = $source_lat + 0.0005;
+	$source_lng_start = round($source_lng, 4);
+	$source_lng_end = $source_lng + 0.0005;
+	$openRequests = $UserDAO->getOpenRequest($user_id, $source_lat_start, $source_lat_end, $source_lng_start, $source_lng_end);
+	print_r($openRequests);
+	die;
+	foreach ($openRequests as $openRequest) {
+	    $destination_lat_start = round($openRequest['destination_lat'], 4);
+	    $destination_lat_end = $destination_lat_start + 0.0003;
+	    $destination_lng_start = round($openRequest['destination_lng'], 4);
+	    $destination_lng_end = $destination_lng_start + 0.0003;
+
+	    //Condtions for find Exact Match travellers
+	    //if ($destination_lat_start <= $destination_lat AND $destination_lat <= $destination_lat_end AND $destination_lng_start <= $destination_lng AND $destination_lng <= $destination_lng_end) {
+	    $openRequestArray[] = $openRequest;
+	    //} 
+	    //$openRequestArray[] = $request;
 	}
+	$result['success'] = '1';
+	$result['response'] = $openRequestArray;
+	echo json_encode($result);
     } catch (PDOException $e) {
 	echo '{"error":{"text":' . $e->getMessage() . '}}';
     }
 }
 
-/* * *****************************************************************************************
- * Verify Mobile code                                                                       
- * url - /verifyMobCode 							
- * method - GET									
- * params - user_id, Verification Code                                                  
+/* * *****************************************************************************************                                                                     
+ * Function for calculate driving distance and travel time duration:
+ * params - source_lat, source_lng, destination_lat, destination_lng
  * ***************************************************************************************** */
 
-function verifyMobCode($user_id, $code) {
-    try {
-	$UserDAO = new UserDAO();
-	$dataArray = $UserDAO->verifyMobCode($user_id, $code);
+function getDrivingDistance($source_lat, $source_lng, $destination_lat, $destination_lng) {
+    $url = "https://maps.googleapis.com/maps/api/distancematrix/json?key=AIzaSyBZpNS8NFjSBgMa1UH6GPBSAvgRm4enJlA&sensor=true&libraries=places&origins=" . $source_lat . "," . $source_lng . "&destinations=" . $destination_lat . "," . $destination_lng . "&mode=driving&language=pl-PL";
+    $ch = curl_init();
+    curl_setopt($ch, CURLOPT_URL, $url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+    curl_setopt($ch, CURLOPT_PROXYPORT, 3128);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 0);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, 0);
+    $response = curl_exec($ch);
+    curl_close($ch);
+    $response_a = json_decode($response, true);
+    $dist = $response_a['rows'][0]['elements'][0]['distance']['value'];
+    $time = $response_a['rows'][0]['elements'][0]['duration']['text'];
+    return $dist;
+}
 
-	if (empty($dataArray)) {
-	    $result['error_status'] = '1';
-	    $result['status_message'] = "Code not match!";
-	    $result['display_message'] = "1";
-	    $result['error_code'] = "003";
-	    echo json_encode($result);
+/* * *****************************************************************************************                                                                     
+ * Function for getting relative travellers on the same direction or route
+ * params - user_id, source_lat, source_lng, destination_lat, destination_lng, distance, openrequest
+ * ***************************************************************************************** */
+
+function getRelativeMatch($user_id, $source_lat, $source_lng, $destination_lat, $destination_lng, $distance, $openRequest) {
+    try {
+	if ($distance > $openRequest['distance']) {
+
+	    return '<script> initMap(' . $source_lat . ',' . $source_lng . ',' . $destination_lat . ',' . $destination_lng . ',' . $openRequest['destination_lat'] . ',' . $openRequest['destination_lng'] . ')</script>';
+
+	    $result = "hiii";
 	} else {
-	    $UserDAO->updateMobVerificationStatus($user_id);
-	    $result['response'] = true;
-	    $result['error_status'] = '0';
-	    $result['status_message'] = "Mobile verify successfully.";
-	    $result['display_message'] = "0";
-	    $result['error_code'] = "000";
-	    echo json_encode($result);
+	    $result = "byee";
 	}
-    } catch (PDOException $e) {
-	echo '{"error":{"text":' . $e->getMessage() . '}}';
+	return $result;
+    } catch (Exception $e) {
+	// not a MySQL exception
+	$e->getMessage();
     }
 }
 
 /* * *****************************************************************************************
- * Get Users Login                                                                       
- * url - /getUsersLogin 																  
+ * Update User Information                                                                      
+ * url - /updateUserDetail																  
  * method - POST																		 
- * params - email or mobile, password                                                     
+ * params - user_id, first_name, last_name, email, mobile
  * ***************************************************************************************** */
 
-function getUserDetails($user_id) {
-    try {
-	$UserDAO = new UserDAO();
-	$dataArray = $UserDAO->getUserDetails($user_id);
-	$result['response'] = $dataArray;
-	if (empty($dataArray)) {
-	    $result['error_status'] = '1';
-	    $result['status_message'] = "Error";
-	    $result['display_message'] = "1";
-	    $result['error_code'] = "004";
-	    echo json_encode($result);
-	} else {
-	    $result['error_status'] = '0';
-	    $result['status_message'] = "Success";
-	    $result['display_message'] = "0";
-	    $result['error_code'] = "000";
-	    echo json_encode($result);
-	}
-    } catch (PDOException $e) {
-	echo '{"error":{"text":' . $e->getMessage() . '}}';
-    }
-}
-
-/* * *****************************************************************************************
- * Get Users Login                                                                       
- * url - /getUsersLogin 																  
- * method - POST																		 
- * params - email or mobile, password                                                     
- * ***************************************************************************************** */
-
-function updateUserDetails() {
+function updateUserDetail() {
     $app = \Slim\Slim::getInstance();
     $request = $app->request();
     $body = $request->getBody();
@@ -238,7 +303,7 @@ function updateUserDetails() {
 
     try {
 	$UserDAO = new UserDAO();
-	$dataArray = $UserDAO->updateUserDetails($user_id, $first_name, $last_name, $email_id, $mobile_number);
+	$dataArray = $UserDAO->updateUserDetail($user_id, $first_name, $last_name, $email_id, $mobile_number);
 	if (!$dataArray) {
 	    $result['response'] = false;
 	    $result['error_status'] = '1';
@@ -250,180 +315,6 @@ function updateUserDetails() {
 	    $result['response'] = true;
 	    $result['error_status'] = '0';
 	    $result['status_message'] = "Details updated successfully.";
-	    $result['display_message'] = "1";
-	    $result['error_code'] = "000";
-	    echo json_encode($result);
-	}
-    } catch (PDOException $e) {
-	echo '{"error":{"text":' . $e->getMessage() . '}}';
-    }
-}
-
-/* * *****************************************************************************************
- * Get Users Adresses List                                                                       
- * url - /userAddressesList 																  
- * method - GET																		 
- * params - user_id                                                  
- * ***************************************************************************************** */
-
-function userAddressesList($user_id) {
-    try {
-	$UserDAO = new UserDAO();
-	$dataArray = $UserDAO->userAddressesList($user_id);
-	$result['response'] = $dataArray;
-	if (empty($dataArray)) {
-	    $result['error_status'] = '1';
-	    $result['status_message'] = "No Data";
-	    $result['display_message'] = "0";
-	    $result['error_code'] = "004";
-	    echo json_encode($result);
-	} else {
-	    $result['error_status'] = '0';
-	    $result['status_message'] = "Success";
-	    $result['display_message'] = "0";
-	    $result['error_code'] = "000";
-	    echo json_encode($result);
-	}
-    } catch (PDOException $e) {
-	echo '{"error":{"text":' . $e->getMessage() . '}}';
-    }
-}
-
-/* * *****************************************************************************************
- * Add new address                                                                       
- * url - /addNewUserAddress 																  
- * method - POST																		 
- * params -  address1, address2, city, pincode, user_id                                                 
- * ***************************************************************************************** */
-
-function addNewUserAddress() {
-    $app = \Slim\Slim::getInstance();
-    $request = $app->request();
-    $body = $request->getBody();
-    $jsondata = json_decode($body);
-    $address1 = $jsondata->address1;
-    $address2 = $jsondata->address2;
-    $city = $jsondata->city;
-    $pincode = $jsondata->pincode;
-    $user_id = $jsondata->user_id;
-
-    try {
-	$UserDAO = new UserDAO();
-	$dataArray = $UserDAO->addNewUserAdress($address1, $address2, $city, $pincode, $user_id);
-	if (!$dataArray) {
-	    $result['response'] = false;
-	    $result['error_status'] = '1';
-	    $result['status_message'] = "Error";
-	    $result['display_message'] = "1";
-	    $result['error_code'] = "004";
-	    echo json_encode($result);
-	} else {
-	    $result['response'] = true;
-	    $result['error_status'] = '0';
-	    $result['status_message'] = "Success";
-	    $result['display_message'] = "1";
-	    $result['error_code'] = "000";
-	    echo json_encode($result);
-	}
-    } catch (PDOException $e) {
-	echo '{"error":{"text":' . $e->getMessage() . '}}';
-    }
-}
-
-/* * *****************************************************************************************
- * Remove address                                                                       
- * url - /removeUserAddress 																  
- * method - GET																		 
- * params - user_address_id                                                 
- * ***************************************************************************************** */
-
-function removeUserAddress($user_address_id) {
-    try {
-	$UserDAO = new UserDAO();
-	$dataArray = $UserDAO->removeUserAddress($user_address_id);
-	if (!$dataArray) {
-	    $result['response'] = false;
-	    $result['error_status'] = '1';
-	    $result['status_message'] = "Error";
-	    $result['display_message'] = "1";
-	    $result['error_code'] = "004";
-	    echo json_encode($result);
-	} else {
-	    $result['response'] = true;
-	    $result['error_status'] = '0';
-	    $result['status_message'] = "Success";
-	    $result['display_message'] = "1";
-	    $result['error_code'] = "000";
-	    echo json_encode($result);
-	}
-    } catch (PDOException $e) {
-	echo '{"error":{"text":' . $e->getMessage() . '}}';
-    }
-}
-
-/* * *****************************************************************************************
- * Edit user address                                                                       
- * url - /editUserAddress 																  
- * method - POST																		 
- * params -  address1, address2, city, pincode, user_address_id                                                 
- * ***************************************************************************************** */
-
-function editUserAddress() {
-    $app = \Slim\Slim::getInstance();
-    $request = $app->request();
-    $body = $request->getBody();
-    $jsondata = json_decode($body);
-    $address1 = $jsondata->address1;
-    $address2 = $jsondata->address2;
-    $city = $jsondata->city;
-    $pincode = $jsondata->pincode;
-    $user_address_id = $jsondata->user_address_id;
-
-    try {
-	$UserDAO = new UserDAO();
-	$dataArray = $UserDAO->editUserAddress($address1, $address2, $city, $pincode, $user_address_id);
-	if (!$dataArray) {
-	    $result['response'] = false;
-	    $result['error_status'] = '1';
-	    $result['status_message'] = "Error";
-	    $result['display_message'] = "1";
-	    $result['error_code'] = "004";
-	    echo json_encode($result);
-	} else {
-	    $result['response'] = true;
-	    $result['error_status'] = '0';
-	    $result['status_message'] = "Success";
-	    $result['display_message'] = "1";
-	    $result['error_code'] = "000";
-	    echo json_encode($result);
-	}
-    } catch (PDOException $e) {
-	echo '{"error":{"text":' . $e->getMessage() . '}}';
-    }
-}
-
-/* * *****************************************************************************************
- * Remove address                                                                       
- * url - /makeDefaultUserAddress 																  
- * method - GET																		 
- * params - user_address_id, user_id                                                
- * ***************************************************************************************** */
-
-function makeDefaultUserAddress($user_address_id, $user_id) {
-    try {
-	$UserDAO = new UserDAO();
-	$dataArray = $UserDAO->makeDefaultUserAddress($user_address_id, $user_id);
-	if (!$dataArray) {
-	    $result['response'] = false;
-	    $result['error_status'] = '1';
-	    $result['status_message'] = "Error";
-	    $result['display_message'] = "1";
-	    $result['error_code'] = "004";
-	    echo json_encode($result);
-	} else {
-	    $result['response'] = true;
-	    $result['error_status'] = '0';
-	    $result['status_message'] = "Success";
 	    $result['display_message'] = "1";
 	    $result['error_code'] = "000";
 	    echo json_encode($result);
@@ -571,5 +462,4 @@ function googlePlusLogin() {
 	echo '{"error":{"text":' . $e->getMessage() . '}}';
     }
 }
-
 ?>

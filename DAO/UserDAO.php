@@ -5,7 +5,7 @@ require_once "DatabaseDAO.php";
 class UserDAO {
 
     // Function for generate four digit OTP
-    function getOTP($mobile_number) {
+    function getOTP() {
 	try {
 	    $result = mt_rand(1000, 9999);
 	    return $result;
@@ -19,7 +19,7 @@ class UserDAO {
     function isMobileExists($mobile_number) {
 	try {
 	    $database = new Database();
-	    $database->query("select * from " . TBL_USERS . " where mobile_number = :mobile_number");
+	    $database->query("SELECT * FROM " . TBL_USERS . " WHERE mobile_number = :mobile_number");
 	    $database->bind(':mobile_number', $mobile_number);
 	    $result = $database->resultset();
 	    $database = null;
@@ -31,13 +31,15 @@ class UserDAO {
     }
 
     //Function for signup the user
-    function SignupUser($fname, $lname = '', $email='', $password, $mobile_number, $mobile_verification_code, $device_id, $gcm_id) {
+    function SignupUser($fname, $gender, $birth_date, $password, $mobile_number, $mobile_verification_code, $device_id, $gcm_id, $lname = '', $email = '') {
 	try {
 	    $database = new Database();
-	    $database->query("INSERT INTO " . TBL_USERS . " (`first_name`, `last_name`, `email_id`, `password`, `mobile_number`, `mobile_verification_code`, `device_id`, `gcm_id`, login_with, created_date) "
-		    . "VALUES (:fname, :lname, :email, :password, :mobile_number, :mobile_verification_code, :device_id, :gcm_id, '1', now())");
+	    $database->query("INSERT INTO " . TBL_USERS . " (`first_name`, `last_name`, `gender`, `birth_date`, `email_id`, `password`, `mobile_number`, `mobile_verification_code`, `device_id`, `gcm_id`, login_with, created_at) "
+		    . "VALUES (:fname, :lname, :gender, :birth_date, :email, :password, :mobile_number, :mobile_verification_code, :device_id, :gcm_id, '1', now())");
 	    $database->bind(':fname', $fname);
 	    $database->bind(':lname', $lname);
+	    $database->bind(':gender', $gender);
+	    $database->bind(':birth_date', $birth_date);
 	    $database->bind(':email', $email);
 	    $database->bind(':password', md5($password));
 	    $database->bind(':mobile_number', $mobile_number);
@@ -45,20 +47,24 @@ class UserDAO {
 	    $database->bind(':device_id', $device_id);
 	    $database->bind(':gcm_id', $gcm_id);
 	    $result = $database->execute();
-	    $insert_Id = $database->lastInsertId();
+	    if (!empty($result)) {
+		$insert_Id = $database->lastInsertId();
+		return $insert_Id;
+	    } else {
+		return null;
+	    }
 	    $database = null;
-	    return $insert_Id;
 	} catch (Exception $e) {
 	    // not a MySQL exception
 	    $e->getMessage();
 	}
     }
 
-    //Function for getting the user information
+    //Function for getting the travellers information
     function getUserById($user_id) {
 	try {
 	    $database = new Database();
-	    $database->query("select * from " . TBL_USERS . " where user_id= :user_id");
+	    $database->query("SELECT * FROM " . TBL_USERS . " WHERE user_id= :user_id");
 	    $database->bind(':user_id', $user_id);
 	    $result = $database->resultset();
 	    $database = null;
@@ -69,15 +75,50 @@ class UserDAO {
 	}
     }
 
-    function updateUserInfo($user_id, $address1, $address2, $city, $state) {
+    //Function for user login
+    function getUserLogin($mobile_number, $password) {
 	try {
 	    $database = new Database();
-	    $database->query("UPDATE users SET address1= '$address1', address2= '$address2', city= '$city', state= '$state' WHERE user_id= '$user_id'");
+	    $database->query("SELECT * FROM " . TBL_USERS . " WHERE mobile_number = :mobile_number and password= :password");
+	    $database->bind(':mobile_number', $mobile_number);
+	    $database->bind(':password', md5($password));
+	    $result = $database->resultset();
+	    $database = null;
+	    return $result;
+	} catch (Exception $e) {
+	    // not a MySQL exception
+	    $e->getMessage();
+	}
+    }
+
+    // Inactive all previous requests of this user
+    function inactivePreviousRequest($user_id) {
+	try {
+	    $database = new Database();
+	    $database->query("UPDATE " . TBL_USER_REQUEST . " SET `request_type` = '3' WHERE `user_id` =:user_id AND request_type ='0'");
+
 	    $database->bind(':user_id', $user_id);
-	    $database->bind(':address1', $address1);
-	    $database->bind(':address2', $address2);
-	    $database->bind(':city', $city);
-	    $database->bind(':state', $state);
+	    $result = $database->resultset();
+	    $database = null;
+	    return $result;
+	} catch (Exception $e) {
+	    // not a MySQL exception
+	    $e->getMessage();
+	}
+    }
+
+    //Function for save travellers search request
+    function saveSearchRequest($user_id, $source_lat, $source_lng, $destination_lat, $destination_lng, $distance) {
+	try {
+	    $database = new Database();
+	    $database->query("INSERT INTO " . TBL_USER_REQUEST . " (`user_id`, `source_lat`, `source_lng`, `destination_lat`, `destination_lng`, `distance`, `request_type`, `requested_at`) "
+		    . "VALUES (:user_id, :source_lat, :source_lng, :destination_lat, :destination_lng, :distance, '0', now())");
+	    $database->bind(':user_id', $user_id);
+	    $database->bind(':source_lat', $source_lat);
+	    $database->bind(':source_lng', $source_lng);
+	    $database->bind(':destination_lat', $destination_lat);
+	    $database->bind(':destination_lng', $destination_lng);
+	    $database->bind(':distance', $distance);
 	    $result = $database->execute();
 	    $database = null;
 	    return $result;
@@ -87,12 +128,15 @@ class UserDAO {
 	}
     }
 
-    function getUsersLogin($userinfo, $password) {
+    // Function for getting list of all open request where source points are same(within 500 Mtrs)
+    function getOpenRequest($user_id, $source_lat_start, $source_lat_end, $source_lng_start, $source_lng_end) {
 	try {
 	    $database = new Database();
-	    $database->query("select * from users where ( email_id= :userinfo OR mobile_number = :userinfo) and password= :password");
-	    $database->bind(':userinfo', $userinfo);
-	    $database->bind(':password', md5($password));
+	    $database->query("SELECT * FROM " . TBL_USER_REQUEST . " WHERE user_id!=:user_id AND request_type=:request_type AND ( source_lat BETWEEN '" . $source_lat_start . "' AND '" . $source_lat_end . "') AND (source_lng BETWEEN '" . $source_lng_start . "' AND '" . $source_lng_end . "') "
+		    . " AND DATE_ADD(requested_at, INTERVAL 30 MINUTE) >= NOW(); ");
+	    $database->bind(':user_id', $user_id);
+	    $database->bind(':request_type', '0');
+
 	    $result = $database->resultset();
 	    $database = null;
 	    return $result;
@@ -159,7 +203,7 @@ class UserDAO {
 	}
     }
 
-    function updateUserDetails($user_id, $first_name, $last_name, $email_id, $mobile_number) {
+    function updateUserDetail($user_id, $first_name, $last_name, $email_id, $mobile_number) {
 	try {
 	    $database = new Database();
 	    $database->query("UPDATE `users` SET `first_name` =:first_name, last_name=:last_name, email_id=:email_id, mobile_number=:mobile_number WHERE `user_id` =:user_id");
